@@ -4,7 +4,7 @@ clear; xdel(winsid())
 ///////////////////////////////////////////////////////////////////////////////
 function [Particle_Par, Modelling_Par] = get_params() //входные параметры основного цикла
     //константы
-    k = 1.38 * 10^-23//константа боцмана
+    k = 1.38 * 10^-23//константа болцмана
     
     //параметры частицы
     coord_start = [random_dist_one_num(0,10,10) random_dist_one_num(0,10,10)] //начальные координаты
@@ -15,9 +15,9 @@ function [Particle_Par, Modelling_Par] = get_params() //входные пара�
     
     //настройки
     Wall_seg = 50 //число делений у стенки
-    K = 1000 // количество циклов
+    K = 5000 // количество циклов
     t_lim = 5 * 10^8 //предел 
-    H = 2 // число частиц
+    H = 5 // число частиц
     RNG_Av = 0 // мат ожидание распределения
     sigma = sqrt(k*T/m) //распределение максвелла
     Lengths = random_dist_array(K, 0, 10, 10) //длина свободного пробега
@@ -78,20 +78,25 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
         vel_sum = sqrt(sum(vel.^2)) //суммарная скорость
         L = Lengths(n) //длина свободного пробега
         t = L/vel_sum //время, нс
-        coord_prev = coord //предыдущая координата
         coord = coord($,:) //берем последнюю строку
+        coord_prev = coord //предыдущая координата
         coord = coord + vel.*t  //изменение координат
         
 //-----------------------------------------------------------------------------
 //УЧЕТ ГРАНИЦ -----------------------------------------------------------------
 //-----------------------------------------------------------------------------
+        //проверяем на перелет
+        perelet_x = 0
+        perelet_y = 0
+        isdep = dep_check(coord, x_lim, y_lim)
+
         //для Х 
         if coord(1) < x_lim(1) then
             x_perelet_flag = %T //флаг перелета
-            perelet = abs(x_lim(1) - coord(1))
+            perelet_x = abs(x_lim(1) - coord(1))
             x_vrezalsya = x_lim(1) //точка x в которой врезался
             y_vrezalsya_left = get_y(x_vrezalsya, coord(2), coord(1), coord_prev(2), coord_prev(1)) //точка y в которой врезался
-            reflected_x_left =  coord(1) + 2*perelet //оценочно куда модекула отлетит после отражения, бывш coord_new(1)
+            reflected_x_left =  coord(1) + 2*perelet_x //оценочно куда модекула отлетит после отражения, бывш coord_new(1)
             
             //зависание частицы
             t = t + TAU //учет времени зависания
@@ -108,10 +113,10 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
     
         if coord(1) > x_lim(2) then
             x_perelet_flag = %T
-            perelet = abs(x_lim(2) - coord(1))
+            perelet_x = abs(x_lim(2) - coord(1))
             x_vrezalsya = x_lim(2)
             y_vrezalsya_right = get_y(x_vrezalsya, coord(2), coord(1), coord_prev(2), coord_prev(1))
-            reflected_x_right = coord(1) - 2*perelet
+            reflected_x_right = coord(1) - 2*perelet_x
             
             //зависание частицы
             t = t + TAU //учет времени зависания
@@ -129,10 +134,10 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
         //для Y 
         if coord(2) < y_lim(1) then
             y_perelet_flag = %T
-            perelet = abs(y_lim(1) - coord(2))
+            perelet_y = abs(y_lim(1) - coord(2))
             y_vrezalsya = y_lim(1)
             x_vrezalsya_down = get_x(y_vrezalsya, coord(2), coord(1), coord_prev(2), coord_prev(1))
-            reflected_y_down =  coord(2) + 2*perelet
+            reflected_y_down =  coord(2) + 2*perelet_y
             
             //зависание частицы
             t = t + TAU //учет времени зависания
@@ -149,10 +154,10 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
         
         if coord(2) > y_lim(2) then
             y_perelet_flag = %T
-            perelet = abs(y_lim(2) - coord(2))
+            perelet_y = abs(y_lim(2) - coord(2))
             y_vrezalsya = y_lim(2)
             x_vrezalsya_up = get_x(y_vrezalsya, coord(2), coord(1), coord_prev(2), coord_prev(1))
-            reflected_y_up =  coord(2) - 2*perelet
+            reflected_y_up =  coord(2) - 2*perelet_y
             
             //зависание частицы
             t = t + TAU //учет времени зависания
@@ -167,22 +172,47 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
             coord_new(2) = coord_stop_y(2) + vel(2).*t
         end 
         //учитываем
+        if perelet_x < perelet_y then
+            y_first = %T //по у дальше чем по х перелетел
+        else
+            y_first = %F
+        end
+        
         if (x_perelet_flag && y_perelet_flag) == %T then
             coord(1) = coord_new(1)
             coord(2) = coord_new(2)
-            coord = cat(1, coord_stop_x, coord_stop_y, coord)
+            if y_first == %T then
+                coord = cat(1, coord_stop_y, coord_stop_x, coord)
+            else
+                coord = cat(1, coord_stop_x, coord_stop_y, coord)
+            end
         end
         if x_perelet_flag == %T then
-            coord(1) = coord_new(1)
-            coord = cat(1, coord_stop_x, coord)
+                if  y_perelet_flag == %F then
+                    coord(1) = coord_new(1)
+                    coord = cat(1, coord_stop_x, coord)
+                end
         end
         if y_perelet_flag == %T then
-            coord(2) = coord_new(2)
-            coord = cat(1, coord_stop_y, coord)
+                if  x_perelet_flag == %F then
+                    coord(2) = coord_new(2)
+                    coord = cat(1, coord_stop_y, coord)
+                end
         end
-        disp("Цикл")
-        disp(n)
-        disp(coord)
+        noc = size(coord)
+        noc = noc(1)
+        for chk = 1:1:noc
+            if coord(chk, 1) < x_lim(1) then
+                coord(chk, 1) = x_lim(1)
+            elseif coord(chk, 1) > x_lim(2) then
+                coord(chk, 1) = x_lim(2)
+            end
+            if coord(chk, 2) < y_lim(1) then
+                coord(chk, 2) = y_lim(1)
+            elseif coord(chk, 2) > y_lim(2) then
+                coord(chk, 2) = y_lim(2)
+            end
+        end 
         
 //-----------------------------------------------------------------------------
 //Учет границ -----------------------------------------------------------------
@@ -255,6 +285,26 @@ function array = random_dist_array(num_of_elements, x_min, x_max, L)
     while i <= num_of_elements
         array(:,i) = random_dist_one_num(x_min, x_max, L)
         i = i + 1
+    end
+endfunction
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//проверка на перелет
+
+function isdep = dep_check(coord, x_lim, y_lim)
+    isdep = [%F %F]
+    if coord(1) < x_lim(1) then
+        isdep(1) = %T
+    end
+    if coord(1) > x_lim(2) then
+        isdep(1) = %T
+    end
+    if coord(2) < y_lim(1) then
+        isdep(2) = %T
+    end
+    if coord(2) > y_lim(2) then
+        isdep(2) = %T
     end
 endfunction
 
@@ -362,3 +412,4 @@ f_right = figure(5)
 title("Правая стенка")
 right_hist = histc_sciver(v_right_all, Wall_seg) 
 bar(right_hist)
+//xdel(winsid()) //закрыть ибо задолбало

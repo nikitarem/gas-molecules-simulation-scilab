@@ -7,24 +7,24 @@ function [Particle_Par, Modelling_Par] = get_params() //входные пара�
     k = 1.38 * 10^-23//константа болцмана
     
     //параметры частицы
-    coord_start = [random_dist_one_num(0,10,10) random_dist_one_num(0,10,10)] //начальные координаты
+    coord_start = [random_dist_one_num(0,40,40) random_dist_one_num(0,40,40)] //начальные координаты
     vel = [0.000001 0.000001] //скорость
     d = 1 //диаметр частицы
     m = 0.0000000001 //масса частицы, г
     T = 10 //температура, град К
     
     //настройки
-    Wall_seg = 50 //число делений у стенки
+    Wall_seg = 20 //число делений у стенки
     K = 5000 // количество циклов
     t_lim = 5 * 10^8 //предел 
-    H = 5 // число частиц
+    H = 3 // число частиц
     RNG_Av = 0 // мат ожидание распределения
     sigma = sqrt(k*T/m) //распределение максвелла
     Lengths = random_dist_array(K, 0, 10, 10) //длина свободного пробега
-    TAU = 10^6 //время зависания на стенке
+    TAU = 10^1 //время зависания на стенке
     //границы (стенки)
-    x_lim = [0 100]
-    y_lim = [0 100]
+    x_lim = [0 40]
+    y_lim = [0 40]
     
     //формирование листов
     Particle_Par = list(coord_start, vel, d, m, T)
@@ -89,7 +89,39 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
         perelet_x = 0
         perelet_y = 0
         isdep = dep_check(coord, x_lim, y_lim)
-
+        
+        //исправляем если перелетел по обеим координатам
+        if (isdep(1)&& isdep(2)) == %T then
+            //рассчитываем перелет
+            if coord(1) < x_lim(1) then
+                perelet_x = abs(x_lim(1) - coord(1))
+                current_x = x_lim(1)
+            end
+            if coord(1) > x_lim(2) then
+                perelet_x = abs(x_lim(2) - coord(1))
+                current_x = x_lim(2)
+            end
+            if coord(2) < y_lim(1) then
+                perelet_y = abs(y_lim(1) - coord(2))
+                current_y = y_lim(1)
+            end
+            if coord(2) > y_lim(2) then
+                perelet_y = abs(y_lim(2) - coord(2))
+                current_y = y_lim(2)
+            end
+            
+            //меняем координату в зависимости от того где сильнее перелетел
+            if perelet_x < perelet_y then
+                new_x = current_x
+                new_y = get_y(new_x, coord(2), coord(1), coord_prev(2), coord_prev(1))
+            elseif perelet_x > perelet_y then
+                new_y = current_y
+                new_x = get_x(new_y, coord(2), coord(1), coord_prev(2), coord_prev(1))
+            end
+            coord(1) = new_x
+            coord(2) = new_y
+        end
+        
         //для Х 
         if coord(1) < x_lim(1) then
             x_perelet_flag = %T //флаг перелета
@@ -171,22 +203,8 @@ function Model_output = begit_anjumanya(Particle_Par, Modelling_Par)
             end
             coord_new(2) = coord_stop_y(2) + vel(2).*t
         end 
-        //учитываем
-        if perelet_x < perelet_y then
-            y_first = %T //по у дальше чем по х перелетел
-        else
-            y_first = %F
-        end
         
-        if (x_perelet_flag && y_perelet_flag) == %T then
-            coord(1) = coord_new(1)
-            coord(2) = coord_new(2)
-            if y_first == %T then
-                coord = cat(1, coord_stop_y, coord_stop_x, coord)
-            else
-                coord = cat(1, coord_stop_x, coord_stop_y, coord)
-            end
-        end
+        //учитываем
         if x_perelet_flag == %T then
                 if  y_perelet_flag == %F then
                     coord(1) = coord_new(1)
@@ -260,6 +278,7 @@ endfunction
 // функция распределения
 function y = distribution_func(lambda, L)
     // формула распределения
+    // L - мода
     y = ((4.*lambda.^2)./(sqrt(%pi).*L^3)).*exp(-(lambda./L).^2)
 endfunction
 
@@ -412,4 +431,3 @@ f_right = figure(5)
 title("Правая стенка")
 right_hist = histc_sciver(v_right_all, Wall_seg) 
 bar(right_hist)
-//xdel(winsid()) //закрыть ибо задолбало
